@@ -53,7 +53,7 @@ list-objects: ## 🗂️  List objects in your bucket
 	docker exec -it $(LOCALSTACK_CONTAINER) awslocal s3 ls s3://$(BUCKET_NAME)
 
 show-last-event: ## 📄 Show contents of a sample audit event from S3
-	docker exec -it $(LOCALSTACK_CONTAINER) awslocal s3 cp s3://$(BUCKET_NAME)/$(TOPIC_NAME)/evt-123.json -
+	docker exec -it $(LOCALSTACK_CONTAINER) awslocal s3 cp s3://$(BUCKET_NAME)/$(TOPIC_NAME)/evt-123.avro -
 
 # -------------------------------------
 # 🔍 OpenSearch

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -26,14 +25,14 @@ type AuditEvent struct {
 func main() {
 	ctx := context.Background()
 
-	// Load schema
+	// Load Avro schema from file
 	schemaBytes, err := os.ReadFile("schema/audit_event.avsc")
 	if err != nil {
-		log.Fatalf("failed to read schema: %v", err)
+		log.Fatalf("❌ Failed to read schema: %v", err)
 	}
 	schema, err := avro.Parse(string(schemaBytes))
 	if err != nil {
-		log.Fatalf("failed to parse avro schema: %v", err)
+		log.Fatalf("❌ Failed to parse Avro schema: %v", err)
 	}
 
 	// OpenSearch client
@@ -41,10 +40,10 @@ func main() {
 		Addresses: []string{"http://localhost:9200"},
 	})
 	if err != nil {
-		log.Fatalf("failed to create OpenSearch client: %v", err)
+		log.Fatalf("❌ Failed to create OpenSearch client: %v", err)
 	}
 
-	// AWS S3 client (via LocalStack)
+	// AWS S3 client (LocalStack)
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion("us-east-1"),
 		config.WithEndpointResolverWithOptions(
@@ -57,13 +56,13 @@ func main() {
 		),
 	)
 	if err != nil {
-		log.Fatalf("failed to load AWS config: %v", err)
+		log.Fatalf("❌ Failed to load AWS config: %v", err)
 	}
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = true
 	})
 
-	// Kafka consumer
+	// Kafka consumer (Redpanda)
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:     []string{"localhost:9092"},
 		Topic:       "audit-events",
@@ -74,15 +73,16 @@ func main() {
 	})
 	defer reader.Close()
 
-	log.Println("🟢 Consumer ready. Waiting for messages...")
+	log.Println("🟢 Kafka consumer started. Waiting for messages...")
 
 	for {
 		m, err := reader.ReadMessage(ctx)
 		if err != nil {
-			log.Printf("error reading message: %v", err)
+			log.Printf("⚠️ Error reading message: %v", err)
 			continue
 		}
 
+		// Decode Avro
 		var event AuditEvent
 		err = avro.Unmarshal(schema, m.Value, &event)
 		if err != nil {
@@ -90,32 +90,39 @@ func main() {
 			continue
 		}
 
-		// Marshal to JSON for OS/S3
-		jsonBytes, err := json.Marshal(event)
-		if err != nil {
-			log.Printf("⚠️ Failed to marshal event to JSON: %v", err)
-			continue
-		}
+		// Index to OpenSearch
+		jsonBody := fmt.Sprintf(`{
+			"id": "%s",
+			"action": "%s",
+			"contactId": %q,
+			"createdAt": "%s"
+		}`, event.ID, event.Action, event.ContactID, event.CreatedAt)
 
-		// Index in OpenSearch
 		res, err := osClient.Index("audit-events",
-			bytes.NewReader(jsonBytes),
+			bytes.NewReader([]byte(jsonBody)),
 			osClient.Index.WithDocumentID(event.ID),
 			osClient.Index.WithContext(ctx),
 		)
 		if err != nil {
 			log.Printf("❌ OpenSearch index error: %v", err)
 		} else {
-			log.Printf("🔍 Indexed to OpenSearch: %s", event.ID)
+			log.Printf("🔍 Indexed in OpenSearch: %s", event.ID)
 			res.Body.Close()
 		}
 
-		// Save to S3 as cold storage
-		s3Key := fmt.Sprintf("audit-events/%s.json", event.ID)
+		// Save Avro to S3
+		avroBytes, err := avro.Marshal(schema, event)
+		if err != nil {
+			log.Printf("❌ Failed to serialize Avro: %v", err)
+			continue
+		}
+
+		s3Key := fmt.Sprintf("audit-events/%s.avro", event.ID)
+
 		_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
 			Bucket: aws.String("audit-poc"),
 			Key:    aws.String(s3Key),
-			Body:   bytes.NewReader(jsonBytes),
+			Body:   bytes.NewReader(avroBytes),
 		})
 		if err != nil {
 			log.Printf("❌ S3 upload error: %v", err)
