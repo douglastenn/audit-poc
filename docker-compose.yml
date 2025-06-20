@@ -1,0 +1,32 @@
+version: '3.8'
+services:
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      - SERVICES=s3,glue
+      - DEBUG=1
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./localstack:/etc/localstack/init/ready.d
+
+  redpanda:
+    image: redpandadata/redpanda:v23.2.2
+    command: redpanda start --overprovisioned --smp 1 --memory 512M --reserve-memory 0M --node-id 0 --check=false
+    ports:
+      - "9092:9092"
+    environment:
+      - REDPANDA_AUTO_CREATE_TOPICS=true
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

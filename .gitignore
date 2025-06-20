@@ -1,0 +1,29 @@
+# Binaries
+/go/*
+
+# Go build files
+*.out
+*.exe
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+
+# Dependency files
+/go/pkg
+/go/bin
+
+# IDEs
+.vscode
+.idea
+*.swp
+
+# Environment
+.env
+
+
+# Localstack
+localstack
+localstack/*

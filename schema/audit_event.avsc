@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "AuditEvent",
+  "namespace": "com.hatch.audit",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "action", "type": "string" },
+    { "name": "contactId", "type": ["null", "string"], "default": null },
+    { "name": "createdAt", "type": "string" },
+    { "name": "details", "type": ["null", { "type": "map", "values": "string" }], "default": null }
+  ]
+}
