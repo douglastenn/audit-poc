@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -91,15 +92,14 @@ func main() {
 		}
 
 		// Index to OpenSearch
-		jsonBody := fmt.Sprintf(`{
-			"id": "%s",
-			"action": "%s",
-			"contactId": %q,
-			"createdAt": "%s"
-		}`, event.ID, event.Action, event.ContactID, event.CreatedAt)
+		jsonBytes, err := json.Marshal(event)
+		if err != nil {
+			log.Printf("❌ Failed to marshal JSON: %v", err)
+			continue
+		}
 
 		res, err := osClient.Index("audit-events",
-			bytes.NewReader([]byte(jsonBody)),
+			bytes.NewReader(jsonBytes),
 			osClient.Index.WithDocumentID(event.ID),
 			osClient.Index.WithContext(ctx),
 		)
